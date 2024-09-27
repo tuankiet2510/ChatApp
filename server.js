@@ -118,7 +118,14 @@ async function produceMessage(channel, message, user) {
     const queue = "sending-message-queue";
     const fullMessage = formatMessage(user.room, user.username, message); // Chuẩn bị thông điệp và gửi vào hàng đợi RabbitMQ
     await channel.assertQueue(queue, { durable: true }); // Tạo một 'sending-message-queue' queue
-    channel.sendToQueue(queue, Buffer.from(JSON.stringify(fullMessage))); // Gửi thông điệp vào queue
+
+    //messages are being converted to buffers with Buffer.from(JSON.stringify(fullMessage)) before being sent to RabbitMQ
+    //channel.sendToQueue(queue, Buffer.from(JSON.stringify(fullMessage)));
+    // Encode messages in UTF-8 before sending to RabbitMQ
+    channel.sendToQueue(
+      queue,
+      Buffer.from(JSON.stringify(fullMessage), "utf-8")
+    ); // Gửi thông điệp vào queue
   } catch (err) {
     console.warn(err);
   }
@@ -132,7 +139,10 @@ async function consumeMessage(channel) {
 
     // Lắng nghe queue và consume thông điệp khi có sẵn
     await channel.consume(queue, (message) => {
-      const messageObject = JSON.parse(message.content.toString()); // Chuyển đổi dữ liệu
+      //const messageObject = JSON.parse(message.content.toString()); // Chuyển đổi dữ liệu
+      // Ensure message content is decoded using UTF-8
+      const messageObject = JSON.parse(message.content.toString("utf-8"));
+
       io.to(messageObject.room).emit("message", messageObject); // Gửi tin nhắn đến tất cả các người dùng trong phòng
       channel.ack(message); // Xác nhận đã nhận thông điệp thành công
     });
